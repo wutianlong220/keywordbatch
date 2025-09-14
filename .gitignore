@@ -51,6 +51,9 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# Keep example file
+!.env.example
+
 # Logs
 *.log
 logs/

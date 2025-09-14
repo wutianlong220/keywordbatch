@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+
+{% block title %}批量关键词处理工具{% endblock %}
+
+{% block head %}
+<style>
+    .folder-selection {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        border: 2px dashed #dee2e6;
+        transition: all 0.3s ease;
+    }
+    
+    .folder-selection:hover {
+        border-color: #0d6efd;
+        background-color: #e7f3ff;
+    }
+    
+    .folder-path {
+        background-color: white;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 10px;
+        margin-top: 10px;
+        font-family: monospace;
+        font-size: 0.9rem;
+        min-height: 40px;
+    }
+    
+    .progress-area {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .log-container {
+        background-color: #212529;
+        color: #ffffff;
+        border-radius: 8px;
+        padding: 15px;
+        height: 300px;
+        overflow-y: auto;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        line-height: 1.4;
+        margin-bottom: 20px;
+    }
+    
+    .log-entry {
+        margin-bottom: 5px;
+        padding: 2px 0;
+    }
+    
+    .log-entry.info {
+        color: #17a2b8;
+    }
+    
+    .log-entry.success {
+        color: #28a745;
+    }
+    
+    .log-entry.warning {
+        color: #ffc107;
+    }
+    
+    .log-entry.error {
+        color: #dc3545;
+    }
+    
+    .log-timestamp {
+        color: #6c757d;
+        font-size: 0.8rem;
+    }
+    
+    .summary-panel {
+        background-color: #e7f3ff;
+        border-radius: 8px;
+        padding: 20px;
+        border-left: 4px solid #0d6efd;
+    }
+    
+    .stat-item {
+        text-align: center;
+        padding: 10px;
+    }
+    
+    .stat-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #0d6efd;
+    }
+    
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    
+    .control-buttons {
+        text-align: center;
+        margin: 20px 0;
+    }
+    
+    .btn-processing {
+        background: linear-gradient(135deg, #ffc107 0%, #ff8c00 100%);
+        border: none;
+        color: #000;
+    }
+    
+    .btn-processing:hover {
+        background: linear-gradient(135deg, #ffb300 0%, #ff7700 100%);
+        color: #000;
+    }
+    
+    .file-status {
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: bold;
+    }
+    
+    .file-status.pending {
+        background-color: #e9ecef;
+        color: #495057;
+    }
+    
+    .file-status.processing {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .file-status.completed {
+        background-color: #d1e7dd;
+        color: #155724;
+    }
+    
+    .file-status.failed {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-10 mx-auto">
+        <!-- Page Header -->
+        <div class="text-center mb-4">
+            <h1 class="display-5 fw-bold">批量关键词处理工具</h1>
+            <p class="lead text-muted">批量处理文件夹中的所有XLSX文件，支持断点续传和错误恢复</p>
+        </div>
+
+        <!-- Folder Selection -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-folder-open"></i> 文件夹设置</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="folder-selection" id="inputFolderSelection">
+                            <div class="text-center">
+                                <i class="fas fa-folder-plus fa-2x text-primary mb-2"></i>
+                                <h6>输入文件夹</h6>
+                                <p class="text-muted small">选择包含XLSX文件的文件夹</p>
+                                <button class="btn btn-outline-primary btn-sm" onclick="selectInputFolder()">
+                                    <i class="fas fa-folder-open"></i> 选择文件夹
+                                </button>
+                            </div>
+                            <div class="folder-path" id="inputFolderPath">
+                                <span class="text-muted">未选择输入文件夹</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="folder-selection" id="outputFolderSelection">
+                            <div class="text-center">
+                                <i class="fas fa-folder-export fa-2x text-success mb-2"></i>
+                                <h6>输出文件夹</h6>
+                                <p class="text-muted small">选择处理结果存放位置</p>
+                                <button class="btn btn-outline-success btn-sm" onclick="selectOutputFolder()">
+                                    <i class="fas fa-folder-open"></i> 选择文件夹
+                                </button>
+                            </div>
+                            <div class="folder-path" id="outputFolderPath">
+                                <span class="text-muted">未选择输出文件夹</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="control-buttons">
+            <button class="btn btn-success btn-lg px-5" id="startProcessingBtn" disabled>
+                <i class="fas fa-play"></i> 开始处理
+            </button>
+            <button class="btn btn-warning btn-lg px-5 ms-3" id="pauseProcessingBtn" disabled>
+                <i class="fas fa-pause"></i> 暂停处理
+            </button>
+            <button class="btn btn-danger btn-lg px-5 ms-3" id="stopProcessingBtn" disabled>
+                <i class="fas fa-stop"></i> 停止处理
+            </button>
+        </div>
+
+        <!-- Progress Display -->
+        <div class="progress-area">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0"><i class="fas fa-tasks"></i> 处理进度</h5>
+                <div>
+                    <span class="badge bg-primary" id="currentStatus">就绪</span>
+                </div>
+            </div>
+            
+            <!-- Overall Progress -->
+            <div class="progress mb-3" style="height: 25px;">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                     role="progressbar" 
+                     id="overallProgressBar"
+                     style="width: 0%"
+                     aria-valuenow="0" 
+                     aria-valuemin="0" 
+                     aria-valuemax="100">
+                    0%
+                </div>
+            </div>
+            
+            <!-- Current Processing Info -->
+            <div class="row text-center mb-3">
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value" id="totalFiles">0</div>
+                        <div class="stat-label">总文件数</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value" id="completedFiles">0</div>
+                        <div class="stat-label">已完成</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value" id="failedFiles">0</div>
+                        <div class="stat-label">失败文件</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <div class="stat-value" id="currentFile">-</div>
+                        <div class="stat-label">当前文件</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Processing Log -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-list"></i> 处理日志</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary" id="clearLogBtn">
+                        <i class="fas fa-trash"></i> 清除日志
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="exportLogBtn">
+                        <i class="fas fa-download"></i> 导出日志
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="log-container" id="logContainer">
+                    <div class="log-entry info">
+                        <span class="log-timestamp">[00:00:00]</span> 系统启动，等待选择文件夹...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary Panel -->
+        <div class="summary-panel" id="summaryPanel" style="display: none;">
+            <h5 class="mb-3"><i class="fas fa-chart-bar"></i> 处理总结</h5>
+            <div class="row">
+                <div class="col-md-8">
+                    <div id="summaryContent">
+                        <!-- Summary content will be populated by JavaScript -->
+                    </div>
+                </div>
+                <div class="col-md-4 text-end">
+                    <button class="btn btn-primary" id="newTaskBtn">
+                        <i class="fas fa-plus"></i> 新建任务
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden file inputs for folder selection -->
+<input type="file" id="inputFolderInput" style="display: none;" webkitdirectory directory multiple>
+<input type="file" id="outputFolderInput" style="display: none;" webkitdirectory directory multiple>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/batch-processor.js') }}"></script>
+{% endblock %}

@@ -4,6 +4,10 @@ Configuration settings for Keyword Batch Processing Application
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class Config:
@@ -18,9 +22,9 @@ class Config:
     TESTS_DIR = PROJECT_ROOT / "tests"
     
     # Application settings
-    DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+    DEBUG = True  # Enable debug mode for development
     HOST = os.getenv("HOST", "0.0.0.0")
-    PORT = int(os.getenv("PORT", "5000"))
+    PORT = int(os.getenv("PORT", "5001"))
     
     # File upload settings
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
@@ -31,8 +35,8 @@ class Config:
     DEEPSEEK_API_BASE = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com/v1")
     
     # Processing settings
-    BATCH_SIZE = 100
-    MAX_CONCURRENT_REQUESTS = 5
+    BATCH_SIZE = 500  # Fixed batch size for processing
+    MAX_CONCURRENT_REQUESTS = 1  # Simple sequential processing
     
     @classmethod
     def init(cls):
