@@ -160,13 +160,13 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6">
-                        <div class="folder-selection" id="inputFolderSelection">
+                        <div class="folder-selection">
                             <div class="text-center">
-                                <i class="fas fa-folder-plus fa-2x text-primary mb-2"></i>
+                                <i class="fas fa-folder-open fa-2x text-primary mb-2"></i>
                                 <h6>输入文件夹</h6>
-                                <p class="text-muted small">选择包含XLSX文件的文件夹</p>
-                                <button class="btn btn-outline-primary btn-sm" onclick="selectInputFolder()">
-                                    <i class="fas fa-folder-open"></i> 选择文件夹
+                                <p class="text-muted small">包含待处理XLSX文件的文件夹路径</p>
+                                <button class="btn btn-outline-primary btn-sm" onclick="selectInputPath()" title="点击选择输入文件夹路径">
+                                    <i class="fas fa-folder-open"></i> 选择路径
                                 </button>
                             </div>
                             <div class="folder-path" id="inputFolderPath">
@@ -175,13 +175,13 @@
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <div class="folder-selection" id="outputFolderSelection">
+                        <div class="folder-selection">
                             <div class="text-center">
-                                <i class="fas fa-folder-export fa-2x text-success mb-2"></i>
+                                <i class="fas fa-folder-download fa-2x text-success mb-2"></i>
                                 <h6>输出文件夹</h6>
-                                <p class="text-muted small">选择处理结果存放位置</p>
-                                <button class="btn btn-outline-success btn-sm" onclick="selectOutputFolder()">
-                                    <i class="fas fa-folder-open"></i> 选择文件夹
+                                <p class="text-muted small">处理后的文件存放路径</p>
+                                <button class="btn btn-outline-success btn-sm" onclick="selectOutputPath()" title="点击选择输出文件夹路径">
+                                    <i class="fas fa-folder-open"></i> 选择路径
                                 </button>
                             </div>
                             <div class="folder-path" id="outputFolderPath">
@@ -298,11 +298,13 @@
     </div>
 </div>
 
-<!-- Hidden file inputs for folder selection -->
-<input type="file" id="inputFolderInput" style="display: none;" webkitdirectory directory multiple>
-<input type="file" id="outputFolderInput" style="display: none;" webkitdirectory directory multiple>
 {% endblock %}
 
 {% block scripts %}
+<!-- Enhanced CSS -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/enhanced.css') }}">
+
+<!-- Enhanced JavaScript -->
+<script src="{{ url_for('static', filename='js/realtime.js') }}"></script>
 <script src="{{ url_for('static', filename='js/batch-processor.js') }}"></script>
 {% endblock %}

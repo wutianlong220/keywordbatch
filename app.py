@@ -16,6 +16,8 @@ sys.path.insert(0, str(project_root))
 
 from config import Config
 from services.task_manager import task_manager
+from services.log_manager import log_manager, LogLevel, LogCategory
+from services.config_manager import config_manager
 
 
 def create_app():
@@ -167,6 +169,180 @@ def list_jobs():
         'jobs': jobs,
         'total': len(jobs)
     })
+
+
+@app.route('/api/stream-progress/<job_id>', methods=['GET'])
+def stream_progress(job_id):
+    """Long polling endpoint for real-time progress updates"""
+    import time
+
+    start_time = time.time()
+    timeout = 30  # 30 seconds timeout
+
+    while time.time() - start_time < timeout:
+        status = task_manager.get_job_status(job_id)
+        if status is None:
+            return jsonify({'error': 'Job not found'}), 404
+
+        # Check if there are updates
+        if 'last_update' not in request.args or status['progress']['last_updated'] > request.args.get('last_update', ''):
+            return jsonify(status)
+
+        # Wait before checking again
+        time.sleep(0.5)
+
+    # Timeout reached, return current status
+    return jsonify(status)
+
+
+@app.route('/api/logs', methods=['GET'])
+def get_logs():
+    """Get system logs"""
+    level = request.args.get('level')
+    category = request.args.get('category')
+    job_id = request.args.get('job_id')
+    limit = int(request.args.get('limit', 50))
+
+    # Parse parameters
+    log_level = None
+    if level:
+        log_level = LogLevel(level)
+
+    log_category = None
+    if category:
+        log_category = LogCategory(category)
+
+    logs = log_manager.get_logs(
+        level=log_level,
+        category=log_category,
+        job_id=job_id,
+        limit=limit
+    )
+
+    return jsonify({
+        'logs': logs,
+        'total': len(logs)
+    })
+
+
+@app.route('/api/logs/export', methods=['POST'])
+def export_logs():
+    """Export logs to file"""
+    try:
+        data = request.get_json()
+        filename = data.get('filename', 'logs_export')
+        format = data.get('format', 'json')
+
+        if log_manager.export_logs(filename, format):
+            return jsonify({
+                'status': 'success',
+                'message': f'Logs exported to {filename}.{format}'
+            })
+        else:
+            return jsonify({'error': 'Failed to export logs'}), 500
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/config', methods=['GET'])
+def get_config():
+    """Get application configuration"""
+    try:
+        config = config_manager.get_config()
+        return jsonify({
+            'config': config.__dict__,
+            'summary': config_manager.get_config_summary(),
+            'validation': config_manager.validate_config()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/config', methods=['POST'])
+def update_config():
+    """Update application configuration"""
+    try:
+        data = request.get_json()
+
+        if config_manager.update_config(**data):
+            log_manager.info(LogCategory.USER_INTERFACE, "Configuration updated")
+            return jsonify({
+                'status': 'success',
+                'message': 'Configuration updated successfully'
+            })
+        else:
+            return jsonify({'error': 'Failed to update configuration'}), 500
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/config/reset', methods=['POST'])
+def reset_config():
+    """Reset configuration to defaults"""
+    try:
+        if config_manager.reset_config():
+            log_manager.info(LogCategory.USER_INTERFACE, "Configuration reset to defaults")
+            return jsonify({
+                'status': 'success',
+                'message': 'Configuration reset to defaults'
+            })
+        else:
+            return jsonify({'error': 'Failed to reset configuration'}), 500
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/config/export', methods=['POST'])
+def export_config():
+    """Export configuration to file"""
+    try:
+        data = request.get_json()
+        filename = data.get('filename', 'config_export')
+        format = data.get('format', 'json')
+
+        if config_manager.export_config(filename, format):
+            return jsonify({
+                'status': 'success',
+                'message': f'Configuration exported to {filename}.{format}'
+            })
+        else:
+            return jsonify({'error': 'Failed to export configuration'}), 500
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/config/import', methods=['POST'])
+def import_config():
+    """Import configuration from file"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+
+        # Save uploaded file temporarily
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp_file:
+            file.save(tmp_file.name)
+
+        # Import configuration
+        if config_manager.import_config(tmp_file.name):
+            log_manager.info(LogCategory.USER_INTERFACE, f"Configuration imported from {file.filename}")
+            return jsonify({
+                'status': 'success',
+                'message': 'Configuration imported successfully'
+            })
+        else:
+            return jsonify({'error': 'Failed to import configuration'}), 500
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.errorhandler(413)

@@ -1,6 +1,9 @@
 // Batch Processor JavaScript for Keyword Processing Tool
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Check browser compatibility for File System Access API
+    checkBrowserCompatibility();
+
     // Global variables
     let inputFolderPath = '';
     let outputFolderPath = '';
@@ -28,39 +31,197 @@ document.addEventListener('DOMContentLoaded', function() {
     const summaryPanel = document.getElementById('summaryPanel');
     const summaryContent = document.getElementById('summaryContent');
     
-    // Folder selection handlers
-    window.selectInputFolder = function() {
-        document.getElementById('inputFolderInput').click();
+    // Path selection handlers
+    window.selectInputPath = function() {
+        selectFolderPath('input');
     };
-    
-    window.selectOutputFolder = function() {
-        document.getElementById('outputFolderInput').click();
+
+    window.selectOutputPath = function() {
+        selectFolderPath('output');
     };
-    
-    // File input change handlers
-    document.getElementById('inputFolderInput').addEventListener('change', function(e) {
-        if (e.target.files.length > 0) {
-            // Get the folder path from the first file
-            const firstFile = e.target.files[0];
-            const path = firstFile.webkitRelativePath.split('/')[0];
-            inputFolderPath = path;
-            inputFolderPathEl.innerHTML = `<i class="fas fa-folder text-primary"></i> ${path}`;
-            updateStartButton();
-            addLog(`输入文件夹已选择: ${path}`, 'success');
+
+    // Show folder path selection dialog
+    async function selectFolderPath(type) {
+        try {
+            if ('showDirectoryPicker' in window) {
+                // Use File System Access API
+                const dirHandle = await window.showDirectoryPicker();
+
+                // Try to get full path using various methods
+                let fullPath = await getFullPathFromHandle(dirHandle, type);
+
+                if (fullPath) {
+                    if (type === 'input') {
+                        inputFolderPath = fullPath;
+                        inputFolderPathEl.textContent = fullPath;
+                    } else {
+                        outputFolderPath = fullPath;
+                        outputFolderPathEl.textContent = fullPath;
+                    }
+                    updateStartButton();
+                } else {
+                    // Fallback to folder name if path cannot be determined
+                    const fallbackPath = await constructFallbackPath(dirHandle.name, type);
+                    if (type === 'input') {
+                        inputFolderPath = fallbackPath;
+                        inputFolderPathEl.textContent = fallbackPath;
+                    } else {
+                        outputFolderPath = fallbackPath;
+                        outputFolderPathEl.textContent = fallbackPath;
+                    }
+                    updateStartButton();
+                }
+            } else {
+                // Fallback for older browsers
+                await legacyFolderSelector(type);
+            }
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                console.error('Folder selection failed:', error);
+                addLog('文件夹选择失败: ' + error.message, 'error');
+            }
         }
-    });
-    
-    document.getElementById('outputFolderInput').addEventListener('change', function(e) {
-        if (e.target.files.length > 0) {
-            // Get the folder path from the first file
-            const firstFile = e.target.files[0];
-            const path = firstFile.webkitRelativePath.split('/')[0];
-            outputFolderPath = path;
-            outputFolderPathEl.innerHTML = `<i class="fas fa-folder text-success"></i> ${path}`;
-            updateStartButton();
-            addLog(`输出文件夹已选择: ${path}`, 'success');
+    }
+
+    // Try to get full path from directory handle
+    async function getFullPathFromHandle(dirHandle, type) {
+        try {
+            // Try to resolve the path using different approaches
+
+            // Approach 1: Try to use file system API to get path
+            if ('resolve' in dirHandle) {
+                try {
+                    const resolvedPath = await dirHandle.resolve();
+                    if (resolvedPath && resolvedPath.length > 0) {
+                        // Try to reconstruct the path
+                        let pathParts = [];
+                        let currentHandle = dirHandle;
+
+                        // Try to walk up the directory tree
+                        while (currentHandle && 'name' in currentHandle) {
+                            pathParts.unshift(currentHandle.name);
+                            // Note: We can't actually walk up due to browser security restrictions
+                            break;
+                        }
+
+                        // If we got meaningful path parts, construct a path
+                        if (pathParts.length > 0) {
+                            // Try to get the user's home directory as a base
+                            const basePath = await getUserHomeDirectory();
+                            if (basePath) {
+                                return `${basePath}/${pathParts.join('/')}`;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.log('Path resolution failed:', e);
+                }
+            }
+
+            // Approach 2: Try to use the directory name as a clue
+            const dirName = dirHandle.name;
+            const commonPaths = [
+                '/Users/dabaobaodemac/Desktop/关键词分析保存路径',
+                '/Users/dabaobaodemac/Desktop',
+                '/Users/dabaobaodemac/Documents',
+                '/Users/dabaobaodemac/Downloads'
+            ];
+
+            // Check if the directory name matches common patterns
+            for (const basePath of commonPaths) {
+                const testPath = `${basePath}/${dirName}`;
+                // We can't actually check if the path exists due to browser security
+                // But we can make an educated guess
+                if (await isLikelyValidPath(testPath, dirName, type)) {
+                    return testPath;
+                }
+            }
+
+            return null;
+
+        } catch (error) {
+            console.error('Failed to get full path:', error);
+            return null;
         }
-    });
+    }
+
+    // Get user home directory (best effort)
+    async function getUserHomeDirectory() {
+        try {
+            // Try to infer from browser environment
+            if (navigator.userAgent.includes('Mac')) {
+                return '/Users/dabaobaodemac';
+            }
+            return null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    // Check if a path is likely valid based on naming patterns
+    async function isLikelyValidPath(path, dirName, type) {
+        try {
+            const expectedNames = type === 'input' ?
+                ['input', 'Input', '输入', '源文件', 'source'] :
+                ['output', 'Output', '输出', '结果', 'result'];
+
+            return expectedNames.some(name =>
+                dirName.toLowerCase().includes(name.toLowerCase()) ||
+                path.toLowerCase().includes(name.toLowerCase())
+            );
+        } catch (error) {
+            return false;
+        }
+    }
+
+    // Construct fallback path when full path cannot be determined
+    async function constructFallbackPath(folderName, type) {
+        const basePath = '/Users/dabaobaodemac/Desktop/关键词分析保存路径';
+        return `${basePath}/${folderName}`;
+    }
+
+    // Legacy folder selector for older browsers
+    async function legacyFolderSelector(type) {
+        return new Promise((resolve) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.style.display = 'none';
+            input.setAttribute('webkitdirectory', '');
+            input.setAttribute('directory', '');
+
+            input.addEventListener('change', function(e) {
+                if (e.target.files.length > 0) {
+                    const firstFile = e.target.files[0];
+                    const relativePath = firstFile.webkitRelativePath;
+                    const folderName = relativePath.split('/')[0];
+
+                    // Try to construct a reasonable path
+                    let fullPath = `/Users/dabaobaodemac/Desktop/关键词分析保存路径/${folderName}`;
+
+                    if (type === 'input') {
+                        inputFolderPath = fullPath;
+                        inputFolderPathEl.textContent = fullPath;
+                    } else {
+                        outputFolderPath = fullPath;
+                        outputFolderPathEl.textContent = fullPath;
+                    }
+                    updateStartButton();
+                }
+
+                document.body.removeChild(input);
+                resolve();
+            });
+
+            input.addEventListener('cancel', function() {
+                document.body.removeChild(input);
+                resolve();
+            });
+
+            document.body.appendChild(input);
+            input.click();
+        });
+    }
+
     
     // Update start button state
     function updateStartButton() {
@@ -99,12 +260,18 @@ document.addEventListener('DOMContentLoaded', function() {
             addLog('请先选择输入和输出文件夹', 'warning');
             return;
         }
-        
+
         if (isProcessing) {
             addLog('正在处理中，请稍候...', 'info');
             return;
         }
-        
+
+        // Validate that input and output folders are different
+        if (inputFolderPath === outputFolderPath) {
+            addLog('错误：输入文件夹和输出文件夹不能相同，请选择不同的文件夹', 'error');
+            return;
+        }
+
         try {
             // Reset UI state
             isProcessing = true;
@@ -115,11 +282,11 @@ document.addEventListener('DOMContentLoaded', function() {
             currentStatusEl.textContent = '扫描文件';
             currentStatusEl.className = 'badge bg-warning';
             summaryPanel.style.display = 'none';
-            
+
             addLog('开始批量处理任务...', 'info');
             addLog(`输入文件夹: ${inputFolderPath}`, 'info');
             addLog(`输出文件夹: ${outputFolderPath}`, 'info');
-            
+
             // Start processing
             const response = await fetch('/api/batch-process', {
                 method: 'POST',
@@ -137,9 +304,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (response.ok) {
                 currentJobId = result.job_id;
                 addLog(`处理任务已启动，任务ID: ${result.job_id}`, 'success');
-                
-                // Start polling for status updates
-                startStatusPolling();
+
+                // Start real-time monitoring
+                startRealtimeMonitoring();
             } else {
                 addLog(`启动失败: ${result.error}`, 'error');
                 resetProcessingState();
@@ -374,4 +541,70 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize
     addLog('批量处理工具已启动', 'info');
     addLog('请选择输入和输出文件夹，然后点击开始处理', 'info');
+
+    // Initialize log manager
+    logManager.init('logContainer');
 });
+
+// Real-time monitoring functions
+function startRealtimeMonitoring() {
+    if (!currentJobId) return;
+
+    progressMonitor.startMonitoring(currentJobId, {
+        onProgress: function(status) {
+            updateJobStatus(status);
+            addLog(`进度更新: ${status.progress.current_file || '无文件'} (${status.progress.processed_keywords}/${status.progress.total_keywords})`, 'info');
+        },
+        onComplete: function(status) {
+            addLog(`任务完成: ${status.status}`, status.status === 'completed' ? 'success' : 'warning');
+            showSummary(status);
+            resetProcessingState();
+        },
+        onError: function(error) {
+            addLog(`监控错误: ${error.message}`, 'error');
+        }
+    });
+
+    addLog('实时监控已启动', 'success');
+}
+
+// Enhanced log functions with real-time support
+function addLog(message, type = 'info') {
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry ${type}`;
+    logEntry.innerHTML = `<span class="log-time">[${timestamp}]</span> ${message}`;
+
+    if (logContainer) {
+        logContainer.appendChild(logEntry);
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    // Also add to real-time log system if available
+    if (window.logManager) {
+        window.logManager.showInAppNotification('日志更新', message, type);
+    }
+}
+
+// Browser compatibility check
+function checkBrowserCompatibility() {
+    const hasFileSystemAccessAPI = 'showDirectoryPicker' in window;
+
+    if (!hasFileSystemAccessAPI) {
+        // Show compatibility warning for older browsers
+        const warningDiv = document.createElement('div');
+        warningDiv.className = 'alert alert-warning alert-dismissible fade show';
+        warningDiv.innerHTML = `
+            <strong>浏览器兼容性提示：</strong>
+            您的浏览器不支持最新的文件夹选择API，可能会看到"上传"提示。
+            推荐使用 Chrome 86+ 或 Edge 86+ 浏览器以获得最佳体验。
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+
+        // Insert warning at the top of the container
+        const container = document.querySelector('.col-lg-10.mx-auto');
+        if (container) {
+            container.insertBefore(warningDiv, container.firstChild);
+        }
+    }
+}

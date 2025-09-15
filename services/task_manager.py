@@ -15,6 +15,7 @@ from enum import Enum
 
 from services.file_processor import FileProcessor, ProcessingResult
 from services.api_client import DeepSeekAPI, APIResult
+from services.log_manager import log_manager, LogLevel, LogCategory
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -150,6 +151,7 @@ class TaskManager:
             self.active_threads[job_id] = thread
         
         logger.info(f"Started job {job_id}")
+        log_manager.info(LogCategory.TASK_MANAGEMENT, f"Started job {job_id}", job_id=job_id)
         return True
     
     def pause_job(self, job_id: str) -> bool:
@@ -174,6 +176,7 @@ class TaskManager:
             self.pause_flags[job_id] = True
         
         logger.info(f"Paused job {job_id}")
+        log_manager.info(LogCategory.TASK_MANAGEMENT, f"Paused job {job_id}", job_id=job_id)
         return True
     
     def resume_job(self, job_id: str) -> bool:
